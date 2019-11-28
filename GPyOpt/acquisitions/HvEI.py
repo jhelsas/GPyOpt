@@ -29,7 +29,7 @@ class AcquisitionHvEI(AcquisitionBase):
 
     analytical_gradient_prediction = True
 
-    def __init__(self, model, space, optimizer=None, cost_withGradients=None, jitter=0.01, model_c=[], jitter_c=None, void_min = 1e5):
+    def __init__(self, model, space, optimizer=None, cost_withGradients=None, jitter=0.01, model_c=[], jitter_c=None, void_min = 1e5, P, r):
         self.optimizer = optimizer
         super(AcquisitionHvEI, self).__init__(model, space, optimizer, cost_withGradients=cost_withGradients)
         self.jitter = jitter
@@ -40,7 +40,9 @@ class AcquisitionHvEI(AcquisitionBase):
             self.jitter_c = jitter_c
         else:
             self.jitter_c = 0.03*np.ones(len(self.model_c))
-        
+
+        self.P = P
+        self.r = r        
 
     @staticmethod
     def fromConfig(model, space, optimizer, cost_withGradients, config, model_c = []):
@@ -53,41 +55,87 @@ class AcquisitionHvEI(AcquisitionBase):
         """
         ########################################################################
         ########################################################################
-        pY1, _  = self.model.predict(self.model.model.X)
-        pC1 = np.zeros((pY1.shape[0],len(self.model_c)))
-        for ic in range(len(self.model_c)):
-            pC1[:,ic] = self.model_c[ic].model.Y[:,0] 
-        
-        valid = np.all((pC1>0.),axis=1)
-        pY1v = pY1[valid,:]
-        if(pY1v.shape[0]>0):
-            fmin1 = pY1v[:,0].min()
-        else:
-            fmin1 = self.void_min
-        ########################################################################
-        pY2, _  = self.model.predict(self.model.model.X)
-        pC2 = np.zeros((pY2.shape[0],len(self.model_c)))
-        for ic in range(len(self.model_c)):
-            pC2[:,ic] = self.model_c[ic].model.Y[:,0] 
-        
-        valid = np.all((pC2>0.),axis=1)
-        pY2v = pY2[valid,:]
-        if(pY2v.shape[0]>0):
-            fmin2 = pY2v[:,0].min()
-        else:
-            fmin2 = self.void_min
-        ########################################################################
-        ########################################################################
-        
+        S = np.array(sorted(self.P, key=lambda x: x[0]))
+        k = len(S)
+
+        c2 = np.sort(S[:,1])
+        c1 = np.sort(S[:,0])
+        c = np.zeros((k+1,k+1))
+
         m1, s1 = self.model[0].predict(x)
         m2, s2 = self.model[1].predict(x)
-        
-        phi1, Phi1, u1 = get_quantiles(self.jitter, fmin1, m1, s1)
-        phi2, Phi2, u2 = get_quantiles(self.jitter, fmin2, m2, s2)
 
-        f_acqu1 = s1 * (u1 * Phi1 + phi1)   # constrained f_acqu
-        f_acqu2 = s2 * (u2 * Phi2 + phi2)   # constrained f_acqu
-        
+        for i in range(k+1):
+            for j in range(k-i+1):
+                if (j == 0):
+                    fMax2 = self.r[1]
+                else:
+                    fMax2 = c2[k-j]
+
+                if (i == 0):
+                    fMax1 = self.r[0]
+                else:
+                    fMax1 = c1[k-i]
+
+                if (j == 0):
+                    cL1 = -np.inf
+                else:
+                    cL1 = c1[j-1]
+
+                if (i == 0):
+                    cL2 = -np.inf
+                else:
+                    cL2 = c2[i-1]
+
+                if (j == k):
+                    cU1 = self.r[0]
+                else:
+                    cU1 = c1[j]
+
+                if (i == k):
+                    cU2 = self.r[1]
+                else:
+                    cU2 = c2[i]
+
+                SM = []
+                for m in range(k):
+                    if (cU1 <= S[m,0]) and (cU2 <= S[m,1]):
+                        SM.insert(0,[S[m,0],S[m,1]])
+
+                phi1U, Phi1U, u1U = get_quantiles(self.jitter, cU1, m1, s1)
+                phi1L, Phi1L, u1L = get_quantiles(self.jitter, cL1, m1, s1)
+                phi2U, Phi2U, u2U = get_quantiles(self.jitter, cU2, m2, s2)
+                phi2L, Phi2L, u2L = get_quantiles(self.jitter, cL2, m2, s2)
+
+                ## Calculate HV 2D ##
+                fMax = [fMax1, fMax2]
+                M = np.array(sorted(np.array(SM), key=lambda x: x[0]))
+                h = 0
+                if (not(len(self.P))==0):
+                    n = len(M)
+                    for l in range(n):
+                        if (l == 0):
+                            h = h + (fMax[0]-M[l,0])*(fMax[1] - M[l,1])
+                        else:
+                            h = h + (fMax[0]-M[l,0]) * (M[l-1,1] - M[l,1])
+                 ####################
+
+                exipsi1U = s1* phi1U + (fMax1-m1)*Phi1U
+                exipsi1L = s1* phi1L + (fMax1-m1)*Phi1L
+                exipsi2U = s2* phi2U + (fMax2-m2)*Phi2U
+                exipsi2L = s2* phi2L + (fMax2-m2)*Phi2L
+
+                sPlus = np.copy(h)
+                Psi1 = exipsi1U - exipsi1L
+                Psi2 = exipsi2U - exipsi2L
+                GaussCDF1 = Phi1U - Phi1L
+                GaussCDF2 = Phi2U - Phi2L
+                c[i,j] = Psi1*Psi2 - sPlus*GaussCDF1*GaussCDF2
+
+        f_acqu = np.sum(np.sum(np.maximum(c,0)))
+
+        ########################### END #######################################
+
         ########################################################################
         
         for ic,mdl_c in enumerate(self.model_c):
@@ -109,29 +157,162 @@ class AcquisitionHvEI(AcquisitionBase):
     
     def _compute_acq_withGradients(self, x):
         """
-        Computes the Constrained Expected Improvement and its derivative (has a not very easy derivative)
+        Computes the Constrained Expected Improvement and its derivative
         """
         ########################################################################
-        pY, _  = self.model.predict(self.model.model.X)
-        pC = np.zeros((pY.shape[0],len(self.model_c)))
-        for ic in range(len(self.model_c)):
-            pC[:,ic] = self.model_c[ic].model.Y[:,0] 
-         
-        valid = np.all((pC>0.),axis=1)
-        pYv = pY[valid,:]
-        if(pYv.shape[0]>0):
-            fmin = pYv[:,0].min()
-        else:
-            fmin = self.void_min
         ########################################################################
+        S = np.array(sorted(self.P, key=lambda x: x[0]))
+        k = len(S)
+
+        c2 = np.sort(S[:,1])
+        c1 = np.sort(S[:,0])
+        c = np.zeros((k+1,k+1))
         
-        m, s, dmdx, dsdx = self.model.predict_withGradients(x)
+        m1, s1, dmdx1, dsdx1 = self.model[0].predict_withGradients(x)
+        m2, s2, dmdx2, dsdx2 = self.model[1].predict_withGradients(x)
         
-        phi, Phi, u = get_quantiles(self.jitter, fmin, m, s)
-        f_acqu = s * (u * Phi + phi)
-        df_acqu = dsdx * phi - Phi * dmdx
+
+        for i in range(k+1):
+            for j in range(k-i+1):
+                if (j == 0):
+                    fMax2 = self.r[1]
+                else:
+                    fMax2 = c2[k-j]
+
+                if (i == 0):
+                    fMax1 = self.r[0]
+                else:
+                    fMax1 = c1[k-i]
+
+                if (j == 0):
+                    cL1 = -np.inf
+                else:
+                    cL1 = c1[j-1]
+
+                if (i == 0):
+                    cL2 = -np.inf
+                else:
+                    cL2 = c2[i-1]
+
+                if (j == k):
+                    cU1 = self.r[0]
+                else:
+                    cU1 = c1[j]
+
+                if (i == k):
+                    cU2 = self.r[1]
+                else:
+                    cU2 = c2[i]
+
+                SM = []
+                for m in range(k):
+                    if (cU1 <= S[m,0]) and (cU2 <= S[m,1]):
+                        SM.insert(0,[S[m,0],S[m,1]])
+
+                phi1U, Phi1U, u1U = get_quantiles(self.jitter, cU1, m1, s1)
+                phi1L, Phi1L, u1L = get_quantiles(self.jitter, cL1, m1, s1)
+                phi2U, Phi2U, u2U = get_quantiles(self.jitter, cU2, m2, s2)
+                phi2L, Phi2L, u2L = get_quantiles(self.jitter, cL2, m2, s2)
+
+                ## Calculate HV 2D ##
+                fMax = [fMax1, fMax2]
+                M = np.array(sorted(np.array(SM), key=lambda x: x[0]))
+                h = 0
+                if (not(len(self.P))==0):
+                    n = len(M)
+                    for l in range(n):
+                        if (l == 0):
+                            h = h + (fMax[0]-M[l,0])*(fMax[1] - M[l,1])
+                        else:
+                            h = h + (fMax[0]-M[l,0]) * (M[l-1,1] - M[l,1])
+                ####################
+
+                exipsi1U = s1* phi1U + (fMax1-m1)*Phi1U
+                exipsi1L = s1* phi1L + (fMax1-m1)*Phi1L
+                exipsi2U = s2* phi2U + (fMax2-m2)*Phi2U
+                exipsi2L = s2* phi2L + (fMax2-m2)*Phi2L
+
+                sPlus = np.copy(h)
+                Psi1 = exipsi1U - exipsi1L
+                Psi2 = exipsi2U - exipsi2L
+                GaussCDF1 = Phi1U - Phi1L
+                GaussCDF2 = Phi2U - Phi2L
+                c[i,j] = Psi1*Psi2 - sPlus*GaussCDF1*GaussCDF2
+        f_acqu = np.sum(np.sum(np.maximum(c,0)))
+
+            ## HVEI Gradient ##
+        mu = np.array([[m1, m2]])
+        s = np.array([[s1, s2]])
+        dmu = np.array([dmdx1, dmdx2])
+        ds = np.array([dsdx1, dsdx2])
         
-        ########################################################################
+        c1_g = np.sort(S[:,0])[::-1]
+        
+        # Define the lower and upper bound for distribution
+        
+        a = -np.inf
+        b = np.inf
+        cL2 = a
+        
+        n = np.size(mu[0][0])
+        n_s = np.size(ds[1])
+        
+        dehvi = np.zeros((1,n_s))
+        
+        c_g = np.zeros((n, k))
+        Px_L = np.zeros((n,1))
+        
+        for i in range(k+1):
+            if i == 0:
+                cU1 = self.r[0]
+            else:
+                cU1 = c1_g[i-1]
+            
+            if i != (k):
+                cU2 = c2[i]
+                cL1 = c1_g[i]
+            else:
+                cU2 = self.r[1]
+                cL1 = a
+        
+            for j in range(n):
+                mu1 = mu[j,0]
+                mu2 = mu[j,1]
+                s1 = s[j,0]
+                s2 = s[j,1]
+                
+                phi1U, Phi1U, u1U = get_quantiles(self.jitter, cU1, mu1, s1)
+                phi1L, Phi1L, u1L = get_quantiles(self.jitter, cL1, mu1, s1)
+                phi2U, Phi2U, u2U = get_quantiles(self.jitter, cU2, mu2, s2)
+                
+                exipsi1U_g = s1* phi1U + (cU1-mu1)*Phi1U
+                exipsi1UL_g = s1* phi1L + (cU1-mu1)*Phi1L
+                exipsi2U_g = s2* phi2U + (cU2-mu2)*Phi2U
+                
+                Psi1 = exipsi1U_g - exipsi1UL_g
+                Psi2 = exipsi2U_g
+                
+                pdfny1i, cdfny1i, u1i = get_quantiles(self.jitter, cL1, mu1, s1)
+                pdfny2i, cdfny2i, u21 = get_quantiles(self.jitter, cU2, mu2, s1)
+                pdfny1i1, cdfny1i1, u1i1 = get_quantiles(self.jitter,cU1, mu1,s1)
+                
+                if i != k:
+                    Px = pdfny1i
+                    dist = cU1 - cL1
+                    R = dist * (pdfny1i*((mu1-cL1)/(s1**2)*ds[0,:] - dmu[0,:]/s1) * Psi2 + (pdfny2i * ds[1,:] - cdfny2i * dmu[1,:]) * cdfny1i)
+                    eq2_2 = -(( -dist/s1 * pdfny1i - cdfny1i) * dmu[0,:] +(pdfny1i - (cL1-mu1) * dist/s1**2 * pdfny1i) * ds[0,:]) *Psi2
+                    
+                else:
+                    R = dist * (pdfny2i * ds[1,:] - cdfny2i * dmu[1,:]) * cdfny1i
+                    eq2_2 = -((-dist/s1 * pdfny1i - cdfny1i) * dmu[0,:] + (pdfny1i)) * Psi2
+            
+                eq2_1 = (pdfny1i1 * dmu[0,:] - cdfny1i1 * dmu[0,:]) * Psi2
+                eq2_3 = (pdfny2i * ds[1,:] - cdfny2i * dmu[1,:]) * Psi1
+                
+                
+                df_acqu = R + eq2_1 + eq2_2 + eq2_3 + df_acqu
+
+            ########################### END #######################################
 
         Phis_c   = []
         dPFsdx_c = []
