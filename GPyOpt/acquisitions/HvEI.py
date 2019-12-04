@@ -29,7 +29,7 @@ class AcquisitionHvEI(AcquisitionBase):
 
     analytical_gradient_prediction = True
 
-    def __init__(self, model, space, optimizer=None, cost_withGradients=None, jitter=0.01, model_c=[], jitter_c=None, void_min = 1e5, P, r):
+    def __init__(self, model, space, optimizer=None, cost_withGradients=None, jitter=0.01, model_c=[], jitter_c=None, void_min = 1e5, P= None, r = None):
         self.optimizer = optimizer
         super(AcquisitionHvEI, self).__init__(model, space, optimizer, cost_withGradients=cost_withGradients)
         self.jitter = jitter
@@ -41,8 +41,15 @@ class AcquisitionHvEI(AcquisitionBase):
         else:
             self.jitter_c = 0.03*np.ones(len(self.model_c))
 
-        self.P = P
-        self.r = r        
+        if P is None:
+            print("There are no solutions in Pareto Front to calculate acquisition function")
+        else:
+            self.P = P
+
+        if r = None:
+            print("There is no reference point to calculate acquisition function")
+        else:
+            self.r = r        
 
     @staticmethod
     def fromConfig(model, space, optimizer, cost_withGradients, config, model_c = []):
