@@ -19,7 +19,13 @@ class AcquisitionBase(object):
         self.model = model
         self.space = space
         self.optimizer = optimizer
-        self.analytical_gradient_acq = self.analytical_gradient_prediction and self.model.analytical_gradient_prediction # flag from the model to test if gradients are available
+        if isinstance(self.model,list):
+            sttm = self.analytical_gradient_prediction 
+            for mdl in self.model:
+                sttm = sttm and mdl.analytical_gradient_prediction
+            self.analytical_gradient_acq = sttm 
+        else:
+            self.analytical_gradient_acq = self.analytical_gradient_prediction and self.model.analytical_gradient_prediction # flag from the model to test if gradients are available
 
         if cost_withGradients is  None:
             self.cost_withGradients = constant_cost_withGradients

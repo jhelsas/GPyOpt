@@ -3,6 +3,7 @@
 
 from .base import AcquisitionBase
 from .EI import AcquisitionEI
+from .HvEI import AcquisitionHvEI
 from .EI_mcmc import AcquisitionEI_MCMC
 from .MPI import AcquisitionMPI
 from .MPI_mcmc import AcquisitionMPI_MCMC
@@ -17,6 +18,8 @@ def select_acquisition(name):
     '''
     if name == 'EI':
         return AcquisitionEI
+    if name == 'HvEI':
+        return AcquisitionHvEI
     elif name == 'EI_MCMC':
         return AcquisitionEI_MCMC
     elif name == 'LCB':

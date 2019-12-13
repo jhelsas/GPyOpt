@@ -46,7 +46,7 @@ class AcquisitionHvEI(AcquisitionBase):
         else:
             self.P = P
 
-        if r = None:
+        if r is None:
             print("There is no reference point to calculate acquisition function")
         else:
             self.r = r        
@@ -67,7 +67,7 @@ class AcquisitionHvEI(AcquisitionBase):
 
         c2 = np.sort(S[:,1])
         c1 = np.sort(S[:,0])
-        c = np.zeros((k+1,k+1))
+        c = np.zeros((x.shape[0],k+1,k+1))
 
         m1, s1 = self.model[0].predict(x)
         m2, s2 = self.model[1].predict(x)
@@ -137,9 +137,10 @@ class AcquisitionHvEI(AcquisitionBase):
                 Psi2 = exipsi2U - exipsi2L
                 GaussCDF1 = Phi1U - Phi1L
                 GaussCDF2 = Phi2U - Phi2L
-                c[i,j] = Psi1*Psi2 - sPlus*GaussCDF1*GaussCDF2
-
-        f_acqu = np.sum(np.sum(np.maximum(c,0)))
+                print(Psi1*Psi2 - sPlus*GaussCDF1*GaussCDF2)
+                c[:,i,j] = (Psi1*Psi2 - sPlus*GaussCDF1*GaussCDF2)[:,0]
+        
+        f_acqu = np.sum(np.sum(np.maximum(c,0),axis=1),axis=1)[:,np.newaxis]
 
         ########################### END #######################################
 
@@ -173,11 +174,10 @@ class AcquisitionHvEI(AcquisitionBase):
 
         c2 = np.sort(S[:,1])
         c1 = np.sort(S[:,0])
-        c = np.zeros((k+1,k+1))
+        c = np.zeros((x.shape[0],k+1,k+1))
         
         m1, s1, dmdx1, dsdx1 = self.model[0].predict_withGradients(x)
         m2, s2, dmdx2, dsdx2 = self.model[1].predict_withGradients(x)
-        
 
         for i in range(k+1):
             for j in range(k-i+1):
@@ -244,10 +244,12 @@ class AcquisitionHvEI(AcquisitionBase):
                 Psi2 = exipsi2U - exipsi2L
                 GaussCDF1 = Phi1U - Phi1L
                 GaussCDF2 = Phi2U - Phi2L
-                c[i,j] = Psi1*Psi2 - sPlus*GaussCDF1*GaussCDF2
-        f_acqu = np.sum(np.sum(np.maximum(c,0)))
+                print(Psi1*Psi2 - sPlus*GaussCDF1*GaussCDF2)
+                c[:,i,j] = (Psi1*Psi2 - sPlus*GaussCDF1*GaussCDF2)[:,0]
 
-            ## HVEI Gradient ##
+        f_acqu = np.sum(np.sum(np.maximum(c,0),axis=1),axis=1)[:,np.newaxis]
+
+        ## HVEI Gradient ##
         mu = np.array([[m1, m2]])
         s = np.array([[s1, s2]])
         dmu = np.array([dmdx1, dmdx2])
@@ -256,7 +258,6 @@ class AcquisitionHvEI(AcquisitionBase):
         c1_g = np.sort(S[:,0])[::-1]
         
         # Define the lower and upper bound for distribution
-        
         a = -np.inf
         b = np.inf
         cL2 = a
@@ -264,7 +265,7 @@ class AcquisitionHvEI(AcquisitionBase):
         n = np.size(mu[0][0])
         n_s = np.size(ds[1])
         
-        dehvi = np.zeros((1,n_s))
+        df_acqu = np.zeros((x.shape[0],n_s))
         
         c_g = np.zeros((n, k))
         Px_L = np.zeros((n,1))
@@ -315,7 +316,6 @@ class AcquisitionHvEI(AcquisitionBase):
             
                 eq2_1 = (pdfny1i1 * dmu[0,:] - cdfny1i1 * dmu[0,:]) * Psi2
                 eq2_3 = (pdfny2i * ds[1,:] - cdfny2i * dmu[1,:]) * Psi1
-                
                 
                 df_acqu = R + eq2_1 + eq2_2 + eq2_3 + df_acqu
 

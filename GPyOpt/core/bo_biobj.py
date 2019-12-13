@@ -34,7 +34,7 @@ class BO_biobj(object):
     :param de_duplication: GPyOpt DuplicateManager class. Avoids re-evaluating the objective at previous, pending or infeasible locations (default, False).
     """
 
-    def __init__(self, model, model_c, space, objective, acquisition, evaluator, X_init, Y_init=None, C_init=None, cost = None, normalize_Y = True, model_update_interval = 1, de_duplication = False):
+    def __init__(self, model, model_c, space, objective, acquisition, evaluator, X_init, Y_init=None, C_init = None, cost = None, normalize_Y = True, model_update_interval = 1, de_duplication = False):
         self.space = space
         self.objective = objective
         self.acquisition = acquisition
@@ -274,10 +274,10 @@ class BO_biobj(object):
                 
             C_inmodel = self.C
 
-            self.model.updateModel(X_inmodel, Y_inmodel, None, None)
+            #self.model.updateModel(X_inmodel, Y_inmodel, None, None)
 
             for i,mdl in enumerate(self.model):
-                mdl.updateModel(X_inmodel, Y_inmodel[:,i:(i+1)]) # Updating the objectives model
+                mdl.updateModel(X_inmodel, Y_inmodel[:,i:(i+1)], None, None) # Updating the objectives model
 
             for i,mdl_c in enumerate(self.model_c):
                 mdl_c.updateModel(X_inmodel, C_inmodel[:,i:(i+1)], None, None) # Updating the constraint model
@@ -287,9 +287,9 @@ class BO_biobj(object):
 
     def _save_model_parameter_values(self):
         if self.model_parameters_iterations is None:
-            self.model_parameters_iterations = self.model.get_model_parameters()
+            self.model_parameters_iterations = np.hstack((self.model[0].get_model_parameters(),self.model[1].get_model_parameters()))
         else:
-            self.model_parameters_iterations = np.vstack((self.model_parameters_iterations,self.model.get_model_parameters()))
+            self.model_parameters_iterations = np.vstack((self.model_parameters_iterations, np.hstack((self.model[0].get_model_parameters(),self.model[1].get_model_parameters())) ))
 
     def plot_acquisition(self,filename=None, normalization_type='stats'):
         """
