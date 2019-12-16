@@ -137,7 +137,6 @@ class AcquisitionHvEI(AcquisitionBase):
                 Psi2 = exipsi2U - exipsi2L
                 GaussCDF1 = Phi1U - Phi1L
                 GaussCDF2 = Phi2U - Phi2L
-                print(Psi1*Psi2 - sPlus*GaussCDF1*GaussCDF2)
                 c[:,i,j] = (Psi1*Psi2 - sPlus*GaussCDF1*GaussCDF2)[:,0]
         
         f_acqu = np.sum(np.sum(np.maximum(c,0),axis=1),axis=1)[:,np.newaxis]
@@ -244,7 +243,6 @@ class AcquisitionHvEI(AcquisitionBase):
                 Psi2 = exipsi2U - exipsi2L
                 GaussCDF1 = Phi1U - Phi1L
                 GaussCDF2 = Phi2U - Phi2L
-                print(Psi1*Psi2 - sPlus*GaussCDF1*GaussCDF2)
                 c[:,i,j] = (Psi1*Psi2 - sPlus*GaussCDF1*GaussCDF2)[:,0]
 
         f_acqu = np.sum(np.sum(np.maximum(c,0),axis=1),axis=1)[:,np.newaxis]
