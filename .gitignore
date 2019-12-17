@@ -4,6 +4,7 @@
 # Packages
 *.egg
 *.egg-info
+*.npz
 dist
 build
 eggs
@@ -22,7 +23,8 @@ pip-log.txt
 GPyOpt-results.txt
 
 # figures in notebooks
-.png
+*.png
+*.jpg
 
 # Unit test / coverage reports
 .coverage
